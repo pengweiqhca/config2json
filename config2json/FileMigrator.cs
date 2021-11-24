@@ -1,13 +1,12 @@
-﻿using System;
-using McMaster.Extensions.CommandLineUtils;
+﻿using McMaster.Extensions.CommandLineUtils;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.ConfigFile;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Configuration.ConfigFile;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Config2Json
 {
@@ -44,38 +43,23 @@ namespace Config2Json
                 //based on https://github.com/aspnet/Entropy/tree/7c027069b715a4b2ffd126f58def04c6111925c3/samples/Config.CustomConfigurationProviders.Sample
                 Console.WriteLine($"Migrating {fileName}...");
 
-                var parsersToUse = new List<IConfigurationParser> {
-                    new KeyValueParser(),
-                    new KeyValueParser("name", "connectionString")
-                };
-
-                var provider = new ConfigFileConfigurationProvider(file, loadFromFile: true, optional: false, Console, parsersToUse);
-                provider.Load();
-                var keyValues = provider.GetFullKeyNames(null, new HashSet<string>())
-                    .Select(key =>
-                    {
-                        provider.TryGet(key, out var value);
-
-                        var newKey = string.IsNullOrEmpty(SectionDelimiter)
-                            ? key
-                            : key.Replace(SectionDelimiter, ":", StringComparison.OrdinalIgnoreCase);
-                        return new KeyValuePair<string, string>(newKey, value);
-                    });
-
                 var config = new ConfigurationBuilder()
-                    .AddInMemoryCollection(keyValues)
+                    .Add(new ConfigFileConfigurationProvider(file, true, false, Console,
+                        new KeyValueParser(logger: Console),
+                        new KeyValueParser("name", "connectionString", Console),
+                        new KeyValueParser("name", logger: Console)))
                     .Build();
 
                 var jsonObject = GetConfigAsJObject(config);
 
                 if (!string.IsNullOrEmpty(Prefix))
                 {
-                    jsonObject = new JObject { { Prefix, jsonObject } };
+                    jsonObject = new JsonObject { { Prefix, jsonObject } };
                 }
 
-                //write to file 
+                //write to file
                 var newPath = Path.ChangeExtension(file, "json");
-                var contents = JsonConvert.SerializeObject(jsonObject, Formatting.Indented);
+                var contents = JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true });
                 await File.WriteAllTextAsync(newPath, contents);
 
                 Console.WriteLine($"Migration of {fileName} to {Path.GetFileName(newPath)} complete");
@@ -87,25 +71,40 @@ namespace Config2Json
             }
         }
 
-        static JObject GetConfigAsJObject(IConfiguration config)
+        private static JsonNode GetConfigAsJObject(IConfiguration config)
         {
-            var root = new JObject();
-
-            foreach (var child in config.GetChildren())
+            var children = config.GetChildren().ToArray();
+            if (children.All(c => int.TryParse(c.Key, out _)))
             {
-                //not strictly correct, but we'll go with it.
-                var isSection = child.Value == null;
-                if (isSection)
-                {
-                    root.Add(child.Key, GetConfigAsJObject(child));
-                }
-                else
-                {
-                    root.Add(child.Key, child.Value);
-                }
-            }
+                var root = new JsonArray();
 
-            return root;
+                foreach (var child in children.OrderBy(c => int.Parse(c.Key)))
+                {
+                    //not strictly correct, but we'll go with it.
+                    if (child.GetChildren().Any())
+                    {
+                        root.Add(GetConfigAsJObject(child));
+                    }
+                    else
+                    {
+                        root.Add(child.Value);
+                    }
+                }
+
+                return root;
+            }
+            else
+            {
+                var root = new JsonObject();
+
+                foreach (var child in children)
+                {
+                    //not strictly correct, but we'll go with it.
+                    root.Add(child.Key, child.GetChildren().Any() ? GetConfigAsJObject(child) : child.Value);
+                }
+
+                return root;
+            }
         }
     }
 }

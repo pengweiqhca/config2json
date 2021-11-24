@@ -3,11 +3,12 @@
 // Taken from https://github.com/aspnet/Entropy/tree/7c027069b715a4b2ffd126f58def04c6111925c3
 // ILogger replaced for IConsole
 
+using McMaster.Extensions.CommandLineUtils;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Xml.Linq;
-using McMaster.Extensions.CommandLineUtils;
 
 namespace Microsoft.Extensions.Configuration.ConfigFile
 {
@@ -50,16 +51,17 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
     ///   var allAppSettings = configuration.GetConfigAsJObject(&quot;appSettings&quot;).GetChildren();
     ///   var myJetConnection = configuration[&quot;connectionStrings:MyJetConn&quot;];
     /// </example>
-    public class ConfigFileConfigurationProvider : ConfigurationProvider
+    public class ConfigFileConfigurationProvider : ConfigurationProvider, IConfigurationSource
     {
-        private readonly IConsole _logger;
         private readonly string _configuration;
         private readonly bool _loadFromFile;
         private readonly bool _isOptional;
+        private readonly IConsole _logger;
 
         private readonly IEnumerable<IConfigurationParser> _parsers;
 
-        public ConfigFileConfigurationProvider(string configuration, bool loadFromFile, bool optional, IConsole logger, IEnumerable<IConfigurationParser> parsers)
+        public ConfigFileConfigurationProvider(string configuration, bool loadFromFile, bool optional,
+            IConsole logger, params IConfigurationParser[] parsers)
         {
             _loadFromFile = loadFromFile;
             _configuration = configuration;
@@ -80,10 +82,11 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
             var context = new Stack<string>();
             var dictionary = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            foreach (var child in document.Root.Elements())
-            {
-                ParseElement(child, context, dictionary);
-            }
+            if (document.Root != null)
+                foreach (var child in document.Root.Elements())
+                {
+                    ParseElement(child, context, dictionary);
+                }
 
             Data = dictionary;
         }
@@ -92,23 +95,62 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
         /// Given an XElement tries to parse that element using any of the KeyValueParsers
         /// and adds it to the results dictionary
         /// </summary>
-        private void ParseElement(XElement element, Stack<string> context, SortedDictionary<string, string> results)
+        private void ParseElement(XElement element, Stack<string> context, SortedDictionary<string, string> results) =>
+            ParseElement(element, element.Name.LocalName, context, results);
+
+        public IConfigurationProvider Build(IConfigurationBuilder builder) => this;
+
+        private void ParseElement(XElement element, string name, Stack<string> context, SortedDictionary<string, string> results)
         {
-            bool parsed = false;
+            context.Push(name);
+
+            foreach (var attr in element.Attributes())
+            {
+                KeyValueParser.Add(results, _logger, KeyValueParser.GetKey(context, attr.Name.LocalName), attr.Value);
+            }
+
+            var parsed = false;
+
             foreach (var parser in _parsers)
             {
-                if (parser.CanParseElement(element))
+                if (!parser.CanParseElement(element)) continue;
+
+                parsed = true;
+
+                parser.ParseElement(element, context, results);
+
+                break;
+            }
+
+            if (!parsed)
+            {
+                foreach (var (key, elements) in element.Elements()
+                             .GroupBy(e => e.Name.LocalName)
+                             .ToDictionary(e => e.Key, e => e.ToArray()))
                 {
-                    parsed = true;
-                    parser.ParseElement(element, context, results);
-                    break;
+                    if (elements.Length == 1)
+                    {
+                        ParseElement(elements[0], elements[0].Name.LocalName, context, results);
+                    }
+                    else
+                    {
+                        context.Push(key);
+
+                        var index = 0;
+
+                        foreach (var node in elements)
+                        {
+                            ParseElement(node, index.ToString(), context, results);
+
+                            index++;
+                        }
+
+                        context.Pop();
+                    }
                 }
             }
 
-            if (!parsed && _logger != null)
-            {
-                _logger.WriteLine($"None of the parsers could parse [{element.ToString()}]!");
-            }
+            context.Pop();
         }
     }
 }

@@ -11,7 +11,7 @@ namespace Config2Json
         };
 
         public const string ExtendedHelpText = @"
-Performs basic migration of an xml .config file to 
+Performs basic migration of an xml .config file to
 a JSON file. Uses the 'key' value as the key, and the
 'value' as the value. Can optionally replace a given
 character with the section marker (':').

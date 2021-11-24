@@ -17,7 +17,7 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
         bool CanParseElement(XElement element);
 
         /// <summary>
-        /// Parses an Xml element and adds it to the results dictionary
+        /// Parses an Xml element and adds it to the results dictionary.
         /// </summary>
         /// <param name="element">Xml element to parse</param>
         /// <param name="context">The context dictionary</param>

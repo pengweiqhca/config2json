@@ -12,11 +12,8 @@ namespace Config2Json
         {
             foreach (var key in provider.GetChildKeys(Enumerable.Empty<string>(), rootKey))
             {
-                string surrogateKey = key;
-                if (rootKey != null)
-                {
-                    surrogateKey = rootKey + ":" + key;
-                }
+                var surrogateKey = key;
+                if (rootKey != null)  surrogateKey = rootKey + ":" + key;
 
                 GetFullKeyNames(provider, surrogateKey, initialKeys);
 
