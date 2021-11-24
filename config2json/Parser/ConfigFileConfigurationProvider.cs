@@ -70,6 +70,8 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
             _parsers = parsers;
         }
 
+        public IEnumerable<string> Keys => Data?.Keys ?? Enumerable.Empty<string>();
+
         public override void Load()
         {
             if (_loadFromFile && !_isOptional && !File.Exists(_configuration))

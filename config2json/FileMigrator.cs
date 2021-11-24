@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration.ConfigFile;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -13,16 +14,16 @@ namespace Config2Json
     public class FileMigrator
     {
         public IEnumerable<string> FilesToSquash { get; }
-        public string SectionDelimiter { get; }
         public string Prefix { get; }
+        public bool Raw { get; }
         public IConsole Console { get; }
 
-        public FileMigrator(IEnumerable<string> filesToSquash, IConsole console, string sectionDelimiter, string prefix)
+        public FileMigrator(IEnumerable<string> filesToSquash, IConsole console, string prefix, bool raw)
         {
             FilesToSquash = filesToSquash;
             Console = console;
-            SectionDelimiter = sectionDelimiter;
             Prefix = prefix;
+            Raw = raw;
         }
 
         public async Task MigrateFiles()
@@ -35,7 +36,7 @@ namespace Config2Json
             }
         }
 
-        async Task MigrateFile(string file)
+        private async Task MigrateFile(string file)
         {
             var fileName = Path.GetFileName(file);
             try
@@ -50,6 +51,16 @@ namespace Config2Json
                         new KeyValueParser("name", logger: Console)))
                     .Build();
 
+                if (Raw)
+                {
+                    foreach (var key in ((ConfigFileConfigurationProvider)config.Providers.First()).Keys)
+                    {
+                        Console.Write(key);
+                        Console.Write(" = ");
+                        Console.WriteLine(config[key]);
+                    }
+                }
+
                 var jsonObject = GetConfigAsJObject(config);
 
                 if (!string.IsNullOrEmpty(Prefix))
@@ -58,11 +69,15 @@ namespace Config2Json
                 }
 
                 //write to file
-                var newPath = Path.ChangeExtension(file, "json");
-                var contents = JsonSerializer.Serialize(jsonObject, new JsonSerializerOptions { WriteIndented = true });
-                await File.WriteAllTextAsync(newPath, contents);
+                await using var fs = File.Open(Path.ChangeExtension(file, "json"), FileMode.Create);
 
-                Console.WriteLine($"Migration of {fileName} to {Path.GetFileName(newPath)} complete");
+                await JsonSerializer.SerializeAsync(fs, jsonObject, new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+                });
+
+                Console.WriteLine($"Migration of {fileName} to {Path.GetFileName(fs.Name)} complete");
             }
             catch (System.Exception ex)
             {

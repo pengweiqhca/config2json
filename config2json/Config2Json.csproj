@@ -5,7 +5,7 @@
     <IsPackable>true</IsPackable>
     <PackAsTool>true</PackAsTool>
     <AssemblyName>config2json</AssemblyName>
-    <Description>A simple tool for migrating a web.config file to an appsettings.json file</Description>
+    <Description>A simple tool for migrating a web.config/app.config file to an appsettings.json file</Description>
     <TargetFrameworks>net6.0</TargetFrameworks>
   </PropertyGroup>
 

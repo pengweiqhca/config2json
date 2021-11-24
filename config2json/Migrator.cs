@@ -1,15 +1,12 @@
 ﻿using McMaster.Extensions.CommandLineUtils;
-using System;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Threading.Tasks;
 
 namespace Config2Json
 {
-    [Command(
-          Name = "dotnet config2json",
-          FullName = "dotnet-config2json",
-          Description = "Converts a web.config file to an appsettings.json file",
+    [Command(Name = "config2json",
+          Description = "Converts a web.config/app.config file to an appsettings.json file",
           ExtendedHelpText = Constants.ExtendedHelpText)]
     [HelpOption]
     public partial class Migrator
@@ -19,17 +16,16 @@ namespace Config2Json
         [FileOrDirectoryExists]
         public string Path { get; }
 
-        [Argument(1, Name = "delimiter", Description = "The character in keys to replace with the section delimiter (:)")]
-        [StringLength(1)]
-        public string SectionDelimiter { get; }
-
-        [Argument(2, Name = "prefix", Description = "If provided, an additional namespace to prefix on generated keys")]
+        [Argument(1, Name = "prefix", Description = "If provided, an additional namespace to prefix on generated keys")]
         public string Prefix { get; }
+        
+        [Option("-r|--raw", Description = "Show parsed raw key/value.")]
+        public bool Raw { get; }
 
         public async Task<int> OnExecute(CommandLineApplication app, IConsole console)
         {
             var filesToMigrate = GetFilesToMigrate(console, Path);
-            var optimiser = new FileMigrator(filesToMigrate, console, SectionDelimiter, Prefix);
+            var optimiser = new FileMigrator(filesToMigrate, console, Prefix, Raw);
 
             await optimiser.MigrateFiles();
 
