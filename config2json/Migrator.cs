@@ -18,7 +18,7 @@ namespace Config2Json
 
         [Argument(1, Name = "prefix", Description = "If provided, an additional namespace to prefix on generated keys")]
         public string Prefix { get; }
-        
+
         [Option("-r|--raw", Description = "Show parsed raw key/value.")]
         public bool Raw { get; }
 
