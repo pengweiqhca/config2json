@@ -138,13 +138,9 @@ namespace Microsoft.Extensions.Configuration.ConfigFile
                     {
                         context.Push(key);
 
-                        var index = 0;
-
-                        foreach (var node in elements)
+                        for (var index = 0; index < elements.Length; index++)
                         {
-                            ParseElement(node, index.ToString(), context, results);
-
-                            index++;
+                            ParseElement(elements[index], index.ToString(), context, results);
                         }
 
                         context.Pop();
