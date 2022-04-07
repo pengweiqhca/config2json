@@ -1,15 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <IsPackable>true</IsPackable>
-    <PackAsTool>true</PackAsTool>
     <AssemblyName>config2json</AssemblyName>
     <Description>A simple tool for migrating a web.config/app.config file to an appsettings.json file</Description>
+    <IsPackable>true</IsPackable>
+    <OutputType>Exe</OutputType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>app.config web.config config xml json</PackageTags>
+    <PackAsTool>true</PackAsTool>
     <TargetFramework>net6.0</TargetFramework>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="../README.md" Pack="true" PackagePath="\" Visible="false" />
+
     <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0" />
   </ItemGroup>
