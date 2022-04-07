@@ -6,11 +6,11 @@
     <PackAsTool>true</PackAsTool>
     <AssemblyName>config2json</AssemblyName>
     <Description>A simple tool for migrating a web.config/app.config file to an appsettings.json file</Description>
-    <TargetFrameworks>net6.0</TargetFrameworks>
+    <TargetFramework>net6.0</TargetFramework>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="3.1.0" />
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0" />
   </ItemGroup>
 

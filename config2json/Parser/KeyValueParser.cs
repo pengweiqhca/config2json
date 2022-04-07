@@ -9,177 +9,176 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml.Linq;
 
-namespace Microsoft.Extensions.Configuration.ConfigFile
+namespace Microsoft.Extensions.Configuration.ConfigFile;
+
+/// <summary>
+/// ConfigurationProvider for *.config files.  Only elements that contain
+/// &lt;add KeyName=&quot;A&quot; ValueName=&quot;B&quot;/&gt; or &lt;remove KeyName=&quot;A&quot; ValueName=&quot;B&quot;/&gt; (value is not
+/// considered for a remove action) as their descendents are used.
+/// All others are skipped.
+/// KeyName/ValueName can be configured. Default is &quot;key&quot; and &quot;value&quot;, respectively.
+/// </summary>
+/// <example>
+/// The following configuration file will result in the following key-value
+/// pairs in the dictionary:
+/// @{
+///     { &quot;nodea:TheKey&quot; : &quot;TheValue&quot; },
+///     { &quot;nodeb:nested:NestedKey&quot; : &quot;ValueA&quot; },
+///     { &quot;nodeb:nested:NestedKey2&quot; : &quot;ValueB&quot; },
+/// }
+///
+/// &lt;configuration&gt;
+///     &lt;nodea&gt;
+///         &lt;add key=&quot;TheKey&quot; value=&quot;TheValue&quot; /&gt;
+///     &lt;/nodea&gt;
+///     &lt;nodeb&gt;
+///         &lt;nested&gt;
+///             &lt;add key=&quot;NestedKey&quot; value=&quot;ValueA&quot; /&gt;
+///             &lt;add key=&quot;NestedKey2&quot; value=&quot;ValueB&quot; /&gt;
+///             &lt;remove key=&quot;SomeTestKey&quot; /&gt;
+///         &lt;/nested&gt;
+///     &lt;/nodeb&gt;
+/// &lt;/configuration&gt;
+///
+/// </example>
+internal class KeyValueParser : IConfigurationParser
 {
-    /// <summary>
-    /// ConfigurationProvider for *.config files.  Only elements that contain
-    /// &lt;add KeyName=&quot;A&quot; ValueName=&quot;B&quot;/&gt; or &lt;remove KeyName=&quot;A&quot; ValueName=&quot;B&quot;/&gt; (value is not
-    /// considered for a remove action) as their descendents are used.
-    /// All others are skipped.
-    /// KeyName/ValueName can be configured. Default is &quot;key&quot; and &quot;value&quot;, respectively.
-    /// </summary>
-    /// <example>
-    /// The following configuration file will result in the following key-value
-    /// pairs in the dictionary:
-    /// @{
-    ///     { &quot;nodea:TheKey&quot; : &quot;TheValue&quot; },
-    ///     { &quot;nodeb:nested:NestedKey&quot; : &quot;ValueA&quot; },
-    ///     { &quot;nodeb:nested:NestedKey2&quot; : &quot;ValueB&quot; },
-    /// }
-    ///
-    /// &lt;configuration&gt;
-    ///     &lt;nodea&gt;
-    ///         &lt;add key=&quot;TheKey&quot; value=&quot;TheValue&quot; /&gt;
-    ///     &lt;/nodea&gt;
-    ///     &lt;nodeb&gt;
-    ///         &lt;nested&gt;
-    ///             &lt;add key=&quot;NestedKey&quot; value=&quot;ValueA&quot; /&gt;
-    ///             &lt;add key=&quot;NestedKey2&quot; value=&quot;ValueB&quot; /&gt;
-    ///             &lt;remove key=&quot;SomeTestKey&quot; /&gt;
-    ///         &lt;/nested&gt;
-    ///     &lt;/nodeb&gt;
-    /// &lt;/configuration&gt;
-    ///
-    /// </example>
-    internal class KeyValueParser : IConfigurationParser
+    private readonly IConsole _logger;
+    private readonly string _addElement;
+    private readonly string _removeElement;
+    private readonly string _clearElement;
+    private readonly string _keyName;
+    private readonly string _valueName;
+
+    public KeyValueParser(string key = "key", string value = "value", IConsole logger = null,
+        string addElement = "add", string removeElement = "remove", string clearElement = "clear")
     {
-        private readonly IConsole _logger;
-        private readonly string _addElement;
-        private readonly string _removeElement;
-        private readonly string _clearElement;
-        private readonly string _keyName;
-        private readonly string _valueName;
+        _keyName = key;
+        _valueName = value;
 
-        public KeyValueParser(string key = "key", string value = "value", IConsole logger = null,
-            string addElement = "add", string removeElement = "remove", string clearElement = "clear")
+        _addElement = addElement;
+        _removeElement = removeElement;
+        _clearElement = clearElement;
+        _logger = logger;
+    }
+
+    public bool CanParseElement(XElement element) =>
+        element.Elements().All(node =>
+            node.Name.LocalName == _addElement || node.Name.LocalName == _removeElement
+                ? node.Attribute(_keyName) != null
+                : node.Name.LocalName == _clearElement);
+
+    public void ParseElement(XElement element, Stack<string> context, SortedDictionary<string, string> results)
+    {
+        foreach (var node in element.Elements())
         {
-            _keyName = key;
-            _valueName = value;
+            var action = GetAction(node.Name.ToString());
 
-            _addElement = addElement;
-            _removeElement = removeElement;
-            _clearElement = clearElement;
-            _logger = logger;
-        }
+            var key = node.Attribute(_keyName);
 
-        public bool CanParseElement(XElement element) =>
-            element.Elements().All(node =>
-                node.Name.LocalName == _addElement || node.Name.LocalName == _removeElement
-                    ? node.Attribute(_keyName) != null
-                    : node.Name.LocalName == _clearElement);
-
-        public void ParseElement(XElement element, Stack<string> context, SortedDictionary<string, string> results)
-        {
-            foreach (var node in element.Elements())
+            switch (action)
             {
-                var action = GetAction(node.Name.ToString());
+                case ConfigurationAction.Add:
+                    if (key == null)
+                    {
+                        _logger?.WriteLine($"[{node}] is not supported because it does not have an attribute with {_keyName}");
 
-                var key = node.Attribute(_keyName);
+                        continue;
+                    }
 
-                switch (action)
-                {
-                    case ConfigurationAction.Add:
-                        if (key == null)
-                        {
-                            _logger?.WriteLine($"[{node}] is not supported because it does not have an attribute with {_keyName}");
+                    context.Push(key.Value);
 
-                            continue;
-                        }
+                    AddValueToDictionary(node, context, results);
 
-                        context.Push(key.Value);
+                    context.Pop();
+                    break;
+                case ConfigurationAction.Remove:
+                    if (key == null)
+                    {
+                        _logger?.WriteLine($"[{node}] is not supported because it does not have an attribute with {_keyName}");
 
-                        AddValueToDictionary(node, context, results);
+                        continue;
+                    }
 
-                        context.Pop();
-                        break;
-                    case ConfigurationAction.Remove:
-                        if (key == null)
-                        {
-                            _logger?.WriteLine($"[{node}] is not supported because it does not have an attribute with {_keyName}");
+                    var fullKey = GetKey(context, key.Value);
 
-                            continue;
-                        }
+                    results.Remove(fullKey);
 
-                        var fullKey = GetKey(context, key.Value);
-
-                        results.Remove(fullKey);
-
-                        Clear(results, fullKey + ConfigurationPath.KeyDelimiter);
-                        break;
-                    case ConfigurationAction.Clear:
-                        Clear(results, GetKey(context, ""));
-                        break;
-                    default:
-                        throw new NotSupportedException($"Unsupported action: [{action}]");
-                }
+                    Clear(results, fullKey + ConfigurationPath.KeyDelimiter);
+                    break;
+                case ConfigurationAction.Clear:
+                    Clear(results, GetKey(context, ""));
+                    break;
+                default:
+                    throw new NotSupportedException($"Unsupported action: [{action}]");
             }
         }
+    }
 
-        protected virtual ConfigurationAction GetAction(string elementName) =>
-            elementName == _addElement
-                ? ConfigurationAction.Add
-                : elementName == _removeElement
-                    ? ConfigurationAction.Remove
-                    : elementName == _clearElement
-                        ? ConfigurationAction.Clear
-                        : throw new NotSupportedException($"Unsupported action: [{elementName}]");
+    protected virtual ConfigurationAction GetAction(string elementName) =>
+        elementName == _addElement
+            ? ConfigurationAction.Add
+            : elementName == _removeElement
+                ? ConfigurationAction.Remove
+                : elementName == _clearElement
+                    ? ConfigurationAction.Clear
+                    : throw new NotSupportedException($"Unsupported action: [{elementName}]");
 
-        private static string GetKey(IEnumerable<string> context)
+    private static string GetKey(IEnumerable<string> context)
+    {
+        return string.Join(ConfigurationPath.KeyDelimiter, context.Reverse());
+    }
+
+    public static string GetKey(IEnumerable<string> context, string name)
+    {
+        return string.Join(ConfigurationPath.KeyDelimiter, context.Reverse().Concat(new[] { name }));
+    }
+
+    public static void Add(SortedDictionary<string, string> results, IConsole logger, string key, string value)
+    {
+        if (value == null) return;
+
+        if (results.ContainsKey(key))
         {
-            return string.Join(ConfigurationPath.KeyDelimiter, context.Reverse());
+            logger?.WriteLine($"{key} exists. Replacing existing value [{results[key]}] with {value}");
+
+            results[key] = value;
         }
-
-        public static string GetKey(IEnumerable<string> context, string name)
+        else
         {
-            return string.Join(ConfigurationPath.KeyDelimiter, context.Reverse().Concat(new[] { name }));
+            results.Add(key, value);
         }
+    }
 
-        public static void Add(SortedDictionary<string, string> results, IConsole logger, string key, string value)
+    private static void Clear(SortedDictionary<string, string> results, string keyPrefix)
+    {
+        foreach (var key in results.Keys.ToArray())
         {
-            if (value == null) return;
+            if (key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
+                results.Remove(key);
+        }
+    }
 
-            if (results.ContainsKey(key))
-            {
-                logger?.WriteLine($"{key} exists. Replacing existing value [{results[key]}] with {value}");
+    protected void AddValueToDictionary(XElement element, Stack<string> context, SortedDictionary<string, string> results)
+    {
+        var hasMore = false;
+        string value = null;
 
-                results[key] = value;
-            }
+        foreach (var attribute in element.Attributes())
+        {
+            if (attribute.Name.LocalName == _keyName) continue;
+
+            if (attribute.Name.LocalName == _valueName) value = attribute.Value;
             else
             {
-                results.Add(key, value);
+                hasMore = true;
+
+                Add(results, _logger, GetKey(context, attribute.Name.LocalName), attribute.Value);
             }
         }
 
-        private static void Clear(SortedDictionary<string, string> results, string keyPrefix)
-        {
-            foreach (var key in results.Keys.ToArray())
-            {
-                if (key.StartsWith(keyPrefix, StringComparison.OrdinalIgnoreCase))
-                    results.Remove(key);
-            }
-        }
+        if (hasMore) Add(results, _logger, GetKey(context, _valueName), value);
 
-        protected void AddValueToDictionary(XElement element, Stack<string> context, SortedDictionary<string, string> results)
-        {
-            var hasMore = false;
-            string value = null;
-
-            foreach (var attribute in element.Attributes())
-            {
-                if (attribute.Name.LocalName == _keyName) continue;
-
-                if (attribute.Name.LocalName == _valueName) value = attribute.Value;
-                else
-                {
-                    hasMore = true;
-
-                    Add(results, _logger, GetKey(context, attribute.Name.LocalName), attribute.Value);
-                }
-            }
-
-            if (hasMore) Add(results, _logger, GetKey(context, _valueName), value);
-
-            else if (value != null) Add(results, _logger, GetKey(context), value);
-        }
+        else if (value != null) Add(results, _logger, GetKey(context), value);
     }
 }
