@@ -10,13 +10,14 @@
     <PackageTags>app.config web.config config xml json</PackageTags>
     <PackAsTool>true</PackAsTool>
     <TargetFramework>net6.0</TargetFramework>
-    <Version>1.0.0</Version>
+    <RollForward>Major</RollForward>
+    <Version>1.0.1</Version>
   </PropertyGroup>
 
   <ItemGroup>
     <None Include="../README.md" Pack="true" PackagePath="\" Visible="false" />
 
-    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.0.1" />
+    <PackageReference Include="McMaster.Extensions.CommandLineUtils" Version="4.1.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="6.0" />
   </ItemGroup>
 
